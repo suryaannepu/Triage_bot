@@ -9,6 +9,7 @@ def generate_pdf_report(user_id: int, start_date: str, end_date: str) -> str:
     user_profile = get_user_profile(user_id)
     health_logs = get_health_logs(user_id, 100)  # Get last 100 logs
     triage_history = get_triage_history(user_id, 20)  # Get last 20 triage results
+
     
     # Filter logs by date range
     if start_date and end_date:
@@ -26,7 +27,13 @@ def generate_pdf_report(user_id: int, start_date: str, end_date: str) -> str:
         <meta charset="UTF-8">
         <title>Medical Health Report</title>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; margin: 40px; }}
+            body {{ 
+                font-family: Arial, sans-serif; 
+                line-height: 1.6; 
+                margin: 40px;
+                color: #000000;
+                background-color: #ffffff;
+            }}
             .header {{ text-align: center; margin-bottom: 30px; }}
             .section {{ margin-bottom: 20px; }}
             .section-title {{ 
@@ -37,7 +44,19 @@ def generate_pdf_report(user_id: int, start_date: str, end_date: str) -> str:
                 padding-bottom: 5px; 
             }}
             .patient-info {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
-            .summary-box {{ background-color: #f5f5f5; padding: 15px; border-radius: 5px; }}
+            .summary-box {{ 
+                background-color: #f5f5f5; 
+                padding: 15px; 
+                border-radius: 5px;
+                color: #000000;
+            }}
+            ul {{
+                color: #000000;
+            }}
+            li {{
+                color: #000000;
+                margin-bottom: 8px;
+            }}
         </style>
     </head>
     <body>
@@ -111,7 +130,18 @@ def generate_pdf_report(user_id: int, start_date: str, end_date: str) -> str:
     try:
         # For this to work, you need to install wkhtmltopdf and add it to your PATH
         # Alternatively, you can use other PDF generation libraries
-        pdf_data = pdfkit.from_string(html_template, False)
+        options = {
+            'page-size': 'A4',
+            'margin-top': '0.75in',
+            'margin-right': '0.75in',
+            'margin-bottom': '0.75in',
+            'margin-left': '0.75in',
+            'encoding': "UTF-8",
+            'no-outline': None,
+            'background': None,
+            'enable-local-file-access': None
+        }
+        pdf_data = pdfkit.from_string(html_template, False, options=options)
         return pdf_data
     except Exception as e:
         # Fallback: return HTML content

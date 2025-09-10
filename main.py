@@ -61,20 +61,6 @@ st.markdown("""
         border-left: 4px solid #ffc107;
         background-color: #fffef0;
     }
-    .chat-message {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 0.5rem;
-        border: 1px solid #e0e0e0;
-    }
-    .user-message {
-        background-color: #f8f9fa;
-        margin-left: 20%;
-    }
-    .assistant-message {
-        background-color: #ffffff;
-        margin-right: 20%;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -318,78 +304,76 @@ def show_daily_checkin():
 
 def show_symptom_triage():
     st.title("🔍 Symptom Triage Assessment")
-    
-    st.info("Describe your symptoms in detail for a medical assessment. This tool uses AI to provide triage recommendations but is not a substitute for professional medical advice.")
-    
+    st.info(
+        "Describe your symptoms in detail for a medical assessment. "
+        "This tool uses AI to provide triage recommendations but is not a substitute for professional medical advice."
+    )
+
+    # Form for symptom input
     with st.form("triage_form"):
-        symptoms = st.text_area("Describe your symptoms in detail:", 
-                              height=120,
-                              placeholder="e.g., I've had a persistent headache for 3 days, accompanied by nausea and sensitivity to light...")
-        
+        symptoms = st.text_area(
+            "Describe your symptoms in detail:",
+            height=120,
+            placeholder="e.g., I've had a persistent headache for 3 days, accompanied by nausea and sensitivity to light..."
+        )
         submitted = st.form_submit_button("Analyze Symptoms")
-        
-        if submitted and symptoms:
-            st.session_state.processing = True
-            try:
-                # Detect language
-                language = detect_language(symptoms)
-                
-                # Generate triage assessment
-                assessment = generate_triage_assessment(symptoms, language)
-                
-                # Save to database
-                add_triage_result(
-                    st.session_state.user_id, 
-                    symptoms, 
-                    assessment['triage_level'],
-                    assessment['confidence'],
-                    assessment['reasoning'],
-                    assessment['recommended_action'],
-                    assessment.get('detailed_analysis', '')
-                )
-                
-                # Display results
-                st.subheader("Triage Assessment")
-                
-                # Style based on triage level
-                triage_class = assessment['triage_level'].replace("-", "_")
-                st.markdown(f'<div class="triage-card {triage_class}">'
-                           f'<h3>{TRIAGE_LEVELS.get(assessment["triage_level"], assessment["triage_level"])}</h3>'
-                           f'<p><strong>Confidence:</strong> {assessment["confidence"]}</p>'
-                           f'<p><strong>Reasoning:</strong> {assessment["reasoning"]}</p>'
-                           f'<p><strong>Recommended Action:</strong> {assessment["recommended_action"]}</p>'
-                           '</div>', unsafe_allow_html=True)
-                
-                if 'detailed_analysis' in assessment and assessment['detailed_analysis']:
-                    with st.expander("Detailed Medical Analysis"):
-                        st.write(assessment['detailed_analysis'])
-                
-                # Option to start a chat about these symptoms
-                st.markdown("---")
-                st.write("Would you like to discuss these symptoms with our health assistant?")
-                if st.button("Chat with Health Assistant about these symptoms"):
-                    # Create a new chat session with the symptoms as context
-                    if not st.session_state.chat_session_id:
-                        st.session_state.chat_session_id = create_chat_session(st.session_state.user_id)
-                    
-                    # Add symptoms as first message
-                    add_chat_message(st.session_state.chat_session_id, "user", 
-                                   f"I'm experiencing these symptoms: {symptoms}")
-                    
-                    # Generate initial response
-                    chat_history = get_chat_history(st.session_state.chat_session_id)
-                    response = generate_chat_response(
-                        f"I'm experiencing these symptoms: {symptoms}", 
-                        chat_history,
-                        language
-                    )
-                    
-                    add_chat_message(st.session_state.chat_session_id, "assistant", response)
-                    
-                    st.session_state.current_page = "Health Assistant"
-                    st.rerun()
-            finally:
-                st.session_state.processing = False
+
+    if submitted and symptoms:
+        st.session_state.processing = True
+        try:
+            language = detect_language(symptoms)
+            assessment = generate_triage_assessment(symptoms, language)
+
+            # Save to database
+            add_triage_result(
+                st.session_state.user_id,
+                symptoms,
+                assessment['triage_level'],
+                assessment['confidence'],
+                assessment['reasoning'],
+                assessment['recommended_action'],
+                assessment.get('detailed_analysis', '')
+            )
+
+            # Display triage results
+            st.subheader("Triage Assessment")
+            triage_class = assessment['triage_level'].replace("-", "_")
+            st.markdown(
+                f'<div class="triage-card {triage_class}">'
+                f'<h3>{TRIAGE_LEVELS.get(assessment["triage_level"], assessment["triage_level"])}</h3>'
+                f'<p><strong>Confidence:</strong> {assessment["confidence"]}</p>'
+                f'<p><strong>Reasoning:</strong> {assessment["reasoning"]}</p>'
+                f'<p><strong>Recommended Action:</strong> {assessment["recommended_action"]}</p>'
+                '</div>', unsafe_allow_html=True
+            )
+
+            if assessment.get('detailed_analysis'):
+                with st.expander("Detailed Medical Analysis"):
+                    st.write(assessment['detailed_analysis'])
+
+        finally:
+            st.session_state.processing = False
+
+        # Chat button OUTSIDE the form
+        st.markdown("---")
+        st.write("Would you like to discuss these symptoms with our health assistant?")
+        if st.button("Chat with Health Assistant about these symptoms", key="chat_about_symptoms"):
+            if not st.session_state.chat_session_id:
+                st.session_state.chat_session_id = create_chat_session(st.session_state.user_id)
+
+            add_chat_message(st.session_state.chat_session_id, "user",
+                             f"I'm experiencing these symptoms: {symptoms}")
+
+            chat_history = get_chat_history(st.session_state.chat_session_id)
+            response = generate_chat_response(
+                f"I'm experiencing these symptoms: {symptoms}",
+                chat_history,
+                language
+            )
+
+            add_chat_message(st.session_state.chat_session_id, "assistant", response)
+            st.session_state.current_page = "Health Assistant"
+            st.rerun()
 
 def show_health_assistant():
     st.title("💬 Health Assistant")
@@ -401,7 +385,7 @@ def show_health_assistant():
     # Get chat history
     chat_history = get_chat_history(st.session_state.chat_session_id)
     
-    # Display chat history
+    # Display chat history using Streamlit's native chat elements
     st.subheader("Conversation History")
     
     if not chat_history:
@@ -409,13 +393,11 @@ def show_health_assistant():
     else:
         for message in chat_history:
             if message['role'] == 'user':
-                st.markdown(f'<div class="chat-message user-message">'
-                           f'<strong>You:</strong> {message["content"]}'
-                           '</div>', unsafe_allow_html=True)
+                with st.chat_message("user"):
+                    st.markdown(message["content"])
             else:
-                st.markdown(f'<div class="chat-message assistant-message">'
-                           f'<strong>Assistant:</strong> {message["content"]}'
-                           '</div>', unsafe_allow_html=True)
+                with st.chat_message("assistant"):
+                    st.markdown(message["content"])
     
     # Chat input
     st.markdown("---")
@@ -425,6 +407,10 @@ def show_health_assistant():
         # Add user message to chat
         add_chat_message(st.session_state.chat_session_id, "user", user_input)
         
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        
         # Generate response
         with st.spinner("Health assistant is thinking..."):
             language = detect_language(user_input)
@@ -432,6 +418,10 @@ def show_health_assistant():
             
             # Add assistant response to chat
             add_chat_message(st.session_state.chat_session_id, "assistant", response)
+            
+            # Display assistant response
+            with st.chat_message("assistant"):
+                st.markdown(response)
             
             # Rerun to update the chat display
             st.rerun()

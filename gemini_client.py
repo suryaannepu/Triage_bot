@@ -1,3 +1,4 @@
+# 
 import os
 import json
 import google.generativeai as genai
@@ -6,11 +7,27 @@ from config import AI_API_KEY
 # Configure Gemini
 genai.configure(api_key=AI_API_KEY)
 
+# Global model instance for better performance
+_model_instance = None
+
 def setup_gemini_model():
-    """Set up the Gemini model"""
+    """Set up the Gemini model (singleton pattern for better performance)"""
+    global _model_instance
+    if _model_instance is not None:
+        return _model_instance
+    
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        return model
+        # Use gemini-2.0-flash for faster responses
+        _model_instance = genai.GenerativeModel(
+            'gemini-2.0-flash',
+            generation_config={
+                "temperature": 0.1,  # Lower temperature for more deterministic responses
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 1024,  # Limit tokens for faster responses
+            }
+        )
+        return _model_instance
     except Exception as e:
         print(f"Error setting up Gemini model: {e}")
         return None
@@ -22,11 +39,11 @@ def evaluate_health_score(symptoms_text: str) -> int:
         return 50  # Default if no model
     
     prompt = f"""
-    Analyze these health symptoms and provide a severity score from 0 (perfect health) to 100 (critical condition):
-    {symptoms_text}
-    
-    Return ONLY a single integer number, nothing else.
-    """
+Analyze these health symptoms and provide a severity score from 0 (perfect health) to 100 (critical condition):
+{symptoms_text}
+
+Return ONLY a single integer number, nothing else.
+"""
     
     try:
         response = model.generate_content(prompt)
@@ -46,26 +63,20 @@ def generate_triage_assessment(symptoms: str, language: str = 'en') -> dict:
             "detailed_analysis": "Unable to generate analysis due to system error"
         }
     
-    language_names = {
-        'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
-        'it': 'Italian', 'pt': 'Portuguese', 'zh': 'Chinese', 'ja': 'Japanese',
-        'hi': 'Hindi'
-    }
-    lang_name = language_names.get(language, 'English')
-    
     prompt = f"""
-    As a medical triage assistant, analyze these symptoms and provide recommendations in {lang_name}:
-    {symptoms}
-    
-    Respond with a JSON object containing:
-    - "triage_level": "self-monitor" or "visit-doctor"
-    - "confidence": "Low", "Medium", or "High"
-    - "reasoning": Brief explanation in {lang_name}
-    - "recommended_action": Concise next steps in {lang_name}
-    - "detailed_analysis": More detailed medical analysis in {lang_name}
-    
-    Return ONLY valid JSON, no other text.
-    """
+As a medical triage assistant, analyze these symptoms and provide recommendations:
+{symptoms}
+
+Respond with a JSON object containing ONLY these fields:
+- "triage_level": "self-monitor" or "visit-doctor"
+- "confidence": "Low", "Medium", or "High"
+- "reasoning": Brief explanation (1-2 sentences)
+- "recommended_action": Concise next steps (1-2 sentences)
+- "detailed_analysis": More detailed medical analysis (2-3 sentences)
+
+Return ONLY valid JSON, no other text. Respond in the same language as the user's symptoms.
+Keep responses concise and to the point.
+"""
     
     try:
         response = model.generate_content(prompt)
@@ -76,15 +87,17 @@ def generate_triage_assessment(symptoms: str, language: str = 'en') -> dict:
             response_text = response_text[7:]
         if response_text.endswith("```"):
             response_text = response_text[:-3]
+        if response_text.startswith("json"):
+            response_text = response_text[4:]
         
         return json.loads(response_text)
     except Exception as e:
         return {
             "triage_level": "self-monitor",
             "confidence": "Medium",
-            "reasoning": f"Error in analysis: {str(e)}",
+            "reasoning": f"Error in analysis",
             "recommended_action": "Please consult a healthcare professional",
-            "detailed_analysis": "Unable to generate detailed analysis due to system error"
+            "detailed_analysis": "Unable to generate detailed analysis"
         }
 
 def generate_chat_response(user_message: str, chat_history: list, language: str = 'en') -> str:
@@ -93,98 +106,97 @@ def generate_chat_response(user_message: str, chat_history: list, language: str 
     if not model:
         return "I'm currently unavailable. Please try again later."
     
-    # Format chat history
-    history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history[-6:]])
+    # Format only the most recent 3 messages for faster processing
+    history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history[-3:]])
     
     prompt = f"""
-    You are a friendly, multilingual health assistant. Respond in {language} language.
-    
-    Previous conversation:
-    {history_text}
-    
-    User: {user_message}
-    
-    Assistant: 
-    """
+You are a warm and approachable health assistant.
+Respond in the same language as the user's message. Keep responses concise (1-2 sentences max).
+
+Recent conversation:
+{history_text}
+
+User: {user_message}
+
+Assistant (brief response in user's language):
+"""
     
     try:
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        return f"I'm having trouble responding right now. Error: {str(e)}"
+        return "I'm having trouble responding right now. Please try again."
 
-def generate_medical_report(user_profile: dict, health_logs: list, triage_history: list) -> str:
+def generate_medical_report(user_profile: dict, health_logs: list, triage_history: list, language: str = 'en') -> str:
     """Generate a comprehensive medical report"""
     model = setup_gemini_model()
     if not model:
         return "Unable to generate report at this time. Please try again later."
     
-    # Prepare data for report generation
+    # Prepare minimal data for report generation
     profile_text = f"""
-    Patient Profile:
-    - Name: {user_profile.get('full_name', 'Not provided')}
-    - Date of Birth: {user_profile.get('date_of_birth', 'Not provided')}
-    - Blood Group: {user_profile.get('blood_group', 'Not provided')}
-    - Height: {user_profile.get('height', 'Not provided')}
-    - Weight: {user_profile.get('weight', 'Not provided')}
-    - Allergies: {user_profile.get('allergies', 'None reported')}
-    - Medications: {user_profile.get('medications', 'None reported')}
-    - Chronic Conditions: {user_profile.get('chronic_conditions', 'None reported')}
-    """
+Name: {user_profile.get('full_name', 'Not provided')}
+DOB: {user_profile.get('date_of_birth', 'Not provided')}
+Blood: {user_profile.get('blood_group', 'Not provided')}
+Allergies: {user_profile.get('allergies', 'None')}
+Medications: {user_profile.get('medications', 'None')}
+Conditions: {user_profile.get('chronic_conditions', 'None')}
+"""
     
-    logs_text = "\n".join([f"- {log['date']}: {log['symptoms']} (Score: {log.get('severity_score', 'N/A')})" 
-                          for log in health_logs[:10]])  # Last 10 logs
+    # Use only last 5 logs for faster processing
+    logs_text = "\n".join([f"{log['date']}: {log['symptoms'][:100]}{'...' if len(log['symptoms']) > 100 else ''}" 
+                          for log in health_logs[-5:]])
     
-    triage_text = "\n".join([f"- {result['created_at']}: {result['symptoms']} -> {result['triage_level']}" 
-                            for result in triage_history[:5]])  # Last 5 triage results
+    # Use only last 3 triage results
+    triage_text = "\n".join([f"{result['created_at']}: {result['triage_level']}" 
+                            for result in triage_history[-3:]])
     
     prompt = f"""
-    You are a medical assistant that generates clear, structured, and professional medical reports for doctors.
-    You will be given a patient profile (static details) and daily health logs (dynamic details).
-    Your task: Combine this information into a concise yet complete medical report.
-    Make it easy for a doctor to quickly understand the patient's condition, medical history, and trends.
-    Do not add imaginary diseases or treatments. If information is missing, mention it clearly.
-    Use keywords and keep it short.
-    
-    PATIENT PROFILE:
-    {profile_text}
-    
-    RECENT HEALTH LOGS (last 10 entries):
-    {logs_text}
-    
-    RECENT TRIAGE ASSESSMENTS (last 5 entries):
-    {triage_text}
-    
-    Generate a concise medical report with these sections:
-    1. Patient Summary (2-3 lines)
-    2. Health Trend Analysis (3-4 lines)
-    3. Symptom Patterns (2-3 lines)
-    4. Risk Assessment (2 lines)
-    5. Recommendations (2-3 lines)
-    
-    Keep it brief and professional.
-    """
+Create a brief medical report in the same language as the symptoms data.
+
+PATIENT:
+{profile_text}
+
+RECENT SYMPTOMS (last 5):
+{logs_text}
+
+RECENT TRIAGE (last 3):
+{triage_text}
+
+Generate a very concise report with:
+1. Summary (1 line)
+2. Trends (1 line)
+3. Patterns (1 line)
+4. Risk (1 line)
+5. Recommendations (1 line)
+
+Keep it extremely brief and professional.
+"""
     
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"Error generating report: {str(e)}"
+        return "Error generating report. Please try again."
 
 def detect_language(text: str) -> str:
-    """Detect language from text"""
-    # Simple language detection
-    common_words = {
-        'en': ['the', 'and', 'you', 'that', 'have'],
-        'es': ['el', 'la', 'que', 'y', 'en'],
-        'fr': ['le', 'la', 'et', 'les', 'des'],
-        'de': ['der', 'die', 'das', 'und', 'ich'],
-        'hi': ['मैं', 'तुम', 'वह', 'क्या', 'है'],
-        'zh': ['的', '是', '在', '我', '有']
-    }
+    """Detect language from text using Gemini"""
+    model = setup_gemini_model()
+    if not model:
+        return 'en'  # Default to English if model not available
     
-    text_lower = text.lower()
-    for lang, words in common_words.items():
-        if any(word in text_lower for word in words):
-            return lang
-    return 'en'  # Default to English
+    # Use shorter text sample for faster detection
+    short_text = text[:200]  # Only use first 200 characters
+    
+    prompt = f"""
+Detect language of this text. Return ONLY the language code (en, es, fr, etc.):
+{short_text}
+
+Language code:
+"""
+    
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip().lower()[:2]  # Only take first 2 chars
+    except:
+        return 'en'  # Default to English on error
