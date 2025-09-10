@@ -1,6 +1,6 @@
 import sqlite3
 import bcrypt
-from datetime import datetime, date, timedelta  # Added timedelta import
+from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 
 def create_user(email: str, password: str, full_name: str) -> int:
@@ -206,8 +206,6 @@ def get_streak_data(user_id: int) -> Dict[str, Any]:
             break
     
     # Get longest streak
-    # This query might need adjustment for SQLite
-    # Let's use a simpler approach
     longest_streak = 0
     current = 0
     prev_date = None

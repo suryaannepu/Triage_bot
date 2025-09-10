@@ -20,10 +20,8 @@ LANGUAGES = {
     'ja': 'Japanese'
 }
 
-# Triage levels
+# Triage levels - only two levels as requested
 TRIAGE_LEVELS = {
     "self-monitor": "🟢 Self Monitor",
-    "visit-doctor": "🟡 Visit Doctor", 
-    "urgent-care": "🟠 Urgent Care",
-    "emergency": "🔴 Emergency"
+    "visit-doctor": "🟡 Visit Doctor"
 }

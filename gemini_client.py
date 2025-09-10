@@ -9,7 +9,7 @@ genai.configure(api_key=AI_API_KEY)
 def setup_gemini_model():
     """Set up the Gemini model"""
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         return model
     except Exception as e:
         print(f"Error setting up Gemini model: {e}")
@@ -58,7 +58,7 @@ def generate_triage_assessment(symptoms: str, language: str = 'en') -> dict:
     {symptoms}
     
     Respond with a JSON object containing:
-    - "triage_level": "self-monitor", "visit-doctor", "urgent-care", or "emergency"
+    - "triage_level": "self-monitor" or "visit-doctor"
     - "confidence": "Low", "Medium", or "High"
     - "reasoning": Brief explanation in {lang_name}
     - "recommended_action": Concise next steps in {lang_name}
@@ -140,6 +140,11 @@ def generate_medical_report(user_profile: dict, health_logs: list, triage_histor
     
     prompt = f"""
     You are a medical assistant that generates clear, structured, and professional medical reports for doctors.
+    You will be given a patient profile (static details) and daily health logs (dynamic details).
+    Your task: Combine this information into a concise yet complete medical report.
+    Make it easy for a doctor to quickly understand the patient's condition, medical history, and trends.
+    Do not add imaginary diseases or treatments. If information is missing, mention it clearly.
+    Use keywords and keep it short.
     
     PATIENT PROFILE:
     {profile_text}
@@ -150,17 +155,14 @@ def generate_medical_report(user_profile: dict, health_logs: list, triage_histor
     RECENT TRIAGE ASSESSMENTS (last 5 entries):
     {triage_text}
     
-    Generate a comprehensive medical report that includes:
-    1. Patient summary
-    2. Health trend analysis
-    3. Symptom patterns
-    4. Risk assessment
-    5. Recommendations for further evaluation
+    Generate a concise medical report with these sections:
+    1. Patient Summary (2-3 lines)
+    2. Health Trend Analysis (3-4 lines)
+    3. Symptom Patterns (2-3 lines)
+    4. Risk Assessment (2 lines)
+    5. Recommendations (2-3 lines)
     
-    Make it easy for a doctor to quickly understand the patient's condition and history.
-    Do not add imaginary diseases or treatments. If information is missing, mention it clearly.
-    
-    Format the report professionally with clear sections.
+    Keep it brief and professional.
     """
     
     try:
@@ -171,17 +173,18 @@ def generate_medical_report(user_profile: dict, health_logs: list, triage_histor
 
 def detect_language(text: str) -> str:
     """Detect language from text"""
-    model = setup_gemini_model()
-    if not model:
-        return 'en'  # Default to English
+    # Simple language detection
+    common_words = {
+        'en': ['the', 'and', 'you', 'that', 'have'],
+        'es': ['el', 'la', 'que', 'y', 'en'],
+        'fr': ['le', 'la', 'et', 'les', 'des'],
+        'de': ['der', 'die', 'das', 'und', 'ich'],
+        'hi': ['मैं', 'तुम', 'वह', 'क्या', 'है'],
+        'zh': ['的', '是', '在', '我', '有']
+    }
     
-    prompt = f"""
-    Detect the language of this text and respond with only the ISO language code (e.g., 'en', 'es', 'fr'):
-    {text}
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip().lower()
-    except:
-        return 'en'  # Default to English on error
+    text_lower = text.lower()
+    for lang, words in common_words.items():
+        if any(word in text_lower for word in words):
+            return lang
+    return 'en'  # Default to English

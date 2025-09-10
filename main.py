@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
 import time
+import sqlite3
 
 # Import our modules
 from database import (
@@ -19,6 +20,10 @@ from visualization import (
 )
 from report_generator import generate_pdf_report, export_health_data
 from config import LANGUAGES, TRIAGE_LEVELS
+from models import init_database
+
+# Initialize database
+init_database()
 
 # Page configuration
 st.set_page_config(
@@ -56,27 +61,20 @@ st.markdown("""
         border-left: 4px solid #ffc107;
         background-color: #fffef0;
     }
-    .urgent-care {
-        border-left: 4px solid #fd7e14;
-        background-color: #fff5eb;
+    .chat-message {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #e0e0e0;
     }
-    .emergency {
-        border-left: 4px solid #dc3545;
-        background-color: #fff5f5;
+    .user-message {
+        background-color: #f8f9fa;
+        margin-left: 20%;
     }
-    # .chat-message {
-    #     padding: 1rem;
-    #     border-radius: 0.5rem;
-    #     margin-bottom: 0.5rem;
-    # }
-    # .user-message {
-    #     background-color: #e6f7ff;
-    #     margin-left: 20%;
-    # }
-    # .assistant-message {
-    #     background-color: #f0f0f0;
-    #     margin-right: 20%;
-    # }
+    .assistant-message {
+        background-color: #ffffff;
+        margin-right: 20%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,6 +87,16 @@ if 'chat_session_id' not in st.session_state:
     st.session_state.chat_session_id = None
 if 'language' not in st.session_state:
     st.session_state.language = 'en'
+if 'triage_result' not in st.session_state:
+    st.session_state.triage_result = None
+if 'detailed_analysis' not in st.session_state:
+    st.session_state.detailed_analysis = None
+if 'symptoms' not in st.session_state:
+    st.session_state.symptoms = ""
+if 'is_health_related' not in st.session_state:
+    st.session_state.is_health_related = True
+if 'processing' not in st.session_state:
+    st.session_state.processing = False
 
 # Authentication functions
 def show_login_page():
@@ -261,8 +269,16 @@ def show_daily_checkin():
         st.write(f"**Severity Score:** {health_logs[0].get('severity_score', 'N/A')}/100")
         
         if st.button("Update Today's Entry"):
-            # Implement update functionality
-            pass
+            # Delete the existing entry and show the form again
+            conn = sqlite3.connect('health_tracker.db')
+            c = conn.cursor()
+            c.execute("DELETE FROM health_logs WHERE user_id = ? AND date = ?", 
+                     (st.session_state.user_id, today))
+            c.execute("DELETE FROM daily_streaks WHERE user_id = ? AND date = ?", 
+                     (st.session_state.user_id, today))
+            conn.commit()
+            conn.close()
+            st.rerun()
     else:
         with st.form("daily_checkin_form"):
             symptoms = st.text_area("How are you feeling today? Describe any symptoms or concerns:", 
@@ -313,7 +329,8 @@ def show_symptom_triage():
         submitted = st.form_submit_button("Analyze Symptoms")
         
         if submitted and symptoms:
-            with st.spinner("Analyzing symptoms..."):
+            st.session_state.processing = True
+            try:
                 # Detect language
                 language = detect_language(symptoms)
                 
@@ -371,6 +388,8 @@ def show_symptom_triage():
                     
                     st.session_state.current_page = "Health Assistant"
                     st.rerun()
+            finally:
+                st.session_state.processing = False
 
 def show_health_assistant():
     st.title("💬 Health Assistant")
@@ -441,25 +460,27 @@ def show_health_trends():
     
     filtered_logs = [log for log in health_logs if log['date'] >= cutoff_date]
     
-    # Display charts
+    # Display charts with unique keys to prevent duplicate element errors
     col1, col2 = st.columns(2)
     
     with col1:
-        st.plotly_chart(create_health_trends_chart(filtered_logs), use_container_width=True)
+        st.plotly_chart(create_health_trends_chart(filtered_logs, "health_trends"), 
+                       use_container_width=True, key="health_trends_chart")
     
     with col2:
-        st.plotly_chart(create_streak_visualization(get_streak_data(st.session_state.user_id)), 
-                       use_container_width=True)
+        streak_data = get_streak_data(st.session_state.user_id)
+        st.plotly_chart(create_streak_visualization(streak_data, "streak_data"), 
+                       use_container_width=True, key="streak_chart")
     
     col3, col4 = st.columns(2)
     
     with col3:
-        st.plotly_chart(create_triage_distribution_chart(triage_history), 
-                       use_container_width=True)
+        st.plotly_chart(create_triage_distribution_chart(triage_history, "triage_distribution"), 
+                       use_container_width=True, key="triage_chart")
     
     with col4:
-        st.plotly_chart(create_daily_patterns_chart(health_logs), 
-                       use_container_width=True)
+        st.plotly_chart(create_daily_patterns_chart(health_logs, "daily_patterns"), 
+                       use_container_width=True, key="patterns_chart")
     
     # Data table
     st.subheader("Raw Health Data")
@@ -586,25 +607,7 @@ def show_profile_page():
                 st.error("Error updating profile")
 
 # Main app logic
-# def main():
-#     # Check if user is logged in
-#     if st.session_state.user_id is None:
-#         if st.session_state.current_page == "login":
-#             show_login_page()
-#         elif st.session_state.current_page == "register":
-#             show_register_page()
-#         else:
-#             st.session_state.current_page = "login"
-#             st.rerun()
-#     else:
-#         show_dashboard()
-
-
 def main():
-    # Initialize database
-    from models import init_database
-    init_database()
-    
     # Check if user is logged in
     if st.session_state.user_id is None:
         if st.session_state.current_page == "login":
@@ -616,5 +619,6 @@ def main():
             st.rerun()
     else:
         show_dashboard()
+
 if __name__ == "__main__":
     main()

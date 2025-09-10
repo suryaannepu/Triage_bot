@@ -4,11 +4,12 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
+import uuid  # For generating unique IDs
 
-def create_health_trends_chart(health_logs: list) -> go.Figure:
+def create_health_trends_chart(health_logs: list, chart_id: str = None) -> go.Figure:
     """Create health trends visualization"""
     if not health_logs:
-        return create_empty_chart("No health data available")
+        return create_empty_chart("No health data available", chart_id)
     
     # Prepare data
     df = pd.DataFrame(health_logs)
@@ -42,7 +43,7 @@ def create_health_trends_chart(health_logs: list) -> go.Figure:
     
     return fig
 
-def create_streak_visualization(streak_data: dict) -> go.Figure:
+def create_streak_visualization(streak_data: dict, chart_id: str = None) -> go.Figure:
     """Create visualization for streak data"""
     # Create a simple metric display
     fig = go.Figure()
@@ -78,10 +79,10 @@ def create_streak_visualization(streak_data: dict) -> go.Figure:
     
     return fig
 
-def create_triage_distribution_chart(triage_history: list) -> go.Figure:
+def create_triage_distribution_chart(triage_history: list, chart_id: str = None) -> go.Figure:
     """Create chart showing distribution of triage levels"""
     if not triage_history:
-        return create_empty_chart("No triage data available")
+        return create_empty_chart("No triage data available", chart_id)
     
     # Count triage levels
     triage_counts = {}
@@ -103,10 +104,10 @@ def create_triage_distribution_chart(triage_history: list) -> go.Figure:
     
     return fig
 
-def create_daily_patterns_chart(health_logs: list) -> go.Figure:
+def create_daily_patterns_chart(health_logs: list, chart_id: str = None) -> go.Figure:
     """Create chart showing patterns by time of day"""
     if not health_logs:
-        return create_empty_chart("No health data available")
+        return create_empty_chart("No health data available", chart_id)
     
     # Extract hour from timestamps
     df = pd.DataFrame(health_logs)
@@ -136,7 +137,7 @@ def create_daily_patterns_chart(health_logs: list) -> go.Figure:
     
     return fig
 
-def create_empty_chart(message: str) -> go.Figure:
+def create_empty_chart(message: str, chart_id: str = None) -> go.Figure:
     """Create an empty chart with a message"""
     fig = go.Figure()
     fig.add_annotation(
@@ -151,4 +152,9 @@ def create_empty_chart(message: str) -> go.Figure:
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
     )
+    
+    # Add a unique ID to prevent duplicate element errors
+    if chart_id:
+        fig.update_layout(title=chart_id)
+    
     return fig
